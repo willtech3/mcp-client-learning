@@ -287,3 +287,67 @@ async def logging_handler(params: types.LoggingMessageNotificationParams) -> Non
     styles = {"error": "red", "warning": "yellow", "info": "dim", "debug": "dim blue"}
     style = styles.get(str(params.level), "dim")
     console.print(f"[{style}]server[{params.level}]: {params.data}[/{style}]")
+
+
+# ---------------------------------------------------------------------------
+# MRTR wire adapters (MCP 2026-07-28, SEP-2322)
+#
+# Under the modern era, servers no longer SEND elicitation/sampling as
+# JSON-RPC requests; they return them as bare {method, params} objects inside
+# an InputRequiredResult, and the client answers them locally before retrying
+# the original request. These adapters bridge those wire-level dicts to the
+# exact same handlers above, so the human-facing UX (terminal prompts,
+# sampling approval) is identical in both eras.
+# ---------------------------------------------------------------------------
+
+# The handlers above take a RequestContext because the legacy SDK provides
+# one; under MRTR there is no server-initiated request and hence no context.
+_NO_CONTEXT: Any = None
+
+
+class WireSamplingError(Exception):
+    """Sampling could not be served client-side. Under MRTR the server is NOT
+    waiting for an answer (there is no error channel for nested requests) —
+    the client simply may not retry, so this propagates and ends the loop."""
+
+
+async def elicit_from_wire(params: dict) -> dict:
+    """Answer one MRTR ``elicitation/create`` inputRequest.
+
+    2026-07-28 notes handled here: `mode` is optional and defaults to
+    "form" (clients MUST treat a mode-less request as form mode), and the
+    URL-mode `elicitationId` field was REMOVED — correlation now lives in
+    the server's opaque requestState — so we synthesize one purely to
+    satisfy the legacy SDK model the terminal handler consumes.
+    """
+    if params.get("mode") == "url":
+        sdk_params: types.ElicitRequestParams = types.ElicitRequestURLParams(
+            mode="url",
+            message=params.get("message", ""),
+            url=params.get("url", ""),
+            elicitationId=params.get("elicitationId", "mrtr"),
+        )
+    else:
+        sdk_params = types.ElicitRequestFormParams(
+            message=params.get("message", ""),
+            requestedSchema=params.get("requestedSchema")
+            or {"type": "object", "properties": {}},
+        )
+    result = await elicitation_handler(_NO_CONTEXT, sdk_params)
+    # Bare InputResponse object: {action, content?} — no resultType, no id.
+    return result.model_dump(by_alias=True, exclude_none=True, exclude={"meta"})
+
+
+async def sample_from_wire(handler: SamplingHandler, params: dict) -> dict:
+    """Answer one MRTR ``sampling/createMessage`` inputRequest.
+
+    The wire params validate directly into the SDK's request model (the
+    sampling *payload* did not change in 2026-07-28 — only its envelope did).
+    An ErrorData outcome (no API key, user rejection, API failure) becomes an
+    exception: under MRTR the spec-sanctioned move is to stop retrying.
+    """
+    sdk_params = types.CreateMessageRequestParams.model_validate(params)
+    result = await handler(_NO_CONTEXT, sdk_params)
+    if isinstance(result, types.ErrorData):
+        raise WireSamplingError(result.message)
+    return result.model_dump(by_alias=True, exclude_none=True, exclude={"meta"})

@@ -33,6 +33,11 @@ class CallbackResult:
     code: str | None = None
     state: str | None = None
     error: str | None = None
+    # RFC 9207 (SEP-2468): the AS's issuer identifier, echoed on the
+    # authorization response so the client can detect mix-up attacks. This
+    # module only transports it; oauth.py validates it (exact string compare
+    # against the issuer recorded before the redirect).
+    iss: str | None = None
 
 
 class _Listener:
@@ -65,6 +70,10 @@ async def _handle(
                     code=query.get("code", [None])[0],
                     state=query.get("state", [None])[0],
                     error=query.get("error", [None])[0],
+                    # parse_qs has already form-url-decoded the value; RFC
+                    # 9207 §2.4 forbids any FURTHER normalization before the
+                    # issuer comparison, so it is passed through verbatim.
+                    iss=query.get("iss", [None])[0],
                 )
             )
     finally:

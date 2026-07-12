@@ -23,6 +23,9 @@ dependencies = [
     # Secure token storage in the OS keychain
     "keyring>=25",
 
+    # SKILL.md frontmatter parsing for SEP-2640 skill verification
+    "pyyaml>=6",
+
     # CLI
     "typer>=0.16",
     "rich>=14",

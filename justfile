@@ -34,3 +34,11 @@ check: lint typecheck test
 # Guided protocol demo against a local Virtual Library server
 demo-local:
     uv run mcp-client demo --server http://127.0.0.1:8080/mcp --anonymous
+
+# Demo against a 2026-07-28 (modern era) server; compat probes with server/discover
+demo-modern:
+    uv run mcp-client demo --server http://127.0.0.1:8080/mcp --anonymous
+
+# Pretty-print a modern server's server/discover capability document
+discover:
+    uv run mcp-client discover --server http://127.0.0.1:8080/mcp --anonymous

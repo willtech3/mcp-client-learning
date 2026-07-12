@@ -50,18 +50,23 @@ class TestResourceMetadataDiscovery:
             'Bearer error="invalid_token", '
             'resource_metadata="https://srv.example/.well-known/oauth-protected-resource/mcp"'
         )
-        url = parse_resource_metadata_url(header, "https://srv.example/mcp")
-        assert url == "https://srv.example/.well-known/oauth-protected-resource/mcp"
+        # When the header names the PRM URL, it is the sole candidate.
+        urls = parse_resource_metadata_url(header, "https://srv.example/mcp")
+        assert urls == ["https://srv.example/.well-known/oauth-protected-resource/mcp"]
 
     def test_falls_back_to_well_known_with_path(self):
-        """2025-11-25 made the header optional; the .well-known fallback
-        must preserve the server's path component."""
-        url = parse_resource_metadata_url(None, "https://srv.example/mcp")
-        assert url == "https://srv.example/.well-known/oauth-protected-resource/mcp"
+        """The header is optional; the .well-known fallback must try the
+        path-inserted form FIRST, then the root form (RFC 9728 order)."""
+        urls = parse_resource_metadata_url(None, "https://srv.example/mcp")
+        assert urls == [
+            "https://srv.example/.well-known/oauth-protected-resource/mcp",
+            "https://srv.example/.well-known/oauth-protected-resource",
+        ]
 
     def test_fallback_without_path(self):
-        url = parse_resource_metadata_url(None, "https://srv.example")
-        assert url == "https://srv.example/.well-known/oauth-protected-resource"
+        # Path-less server: the two well-known forms coincide, so one candidate.
+        urls = parse_resource_metadata_url(None, "https://srv.example")
+        assert urls == ["https://srv.example/.well-known/oauth-protected-resource"]
 
 
 def _mock_http(responses: dict[str, dict | int]) -> httpx.AsyncClient:
