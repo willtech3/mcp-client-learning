@@ -74,6 +74,30 @@ class TokenStore:
             return
         self._fallback_path(server_url).unlink(missing_ok=True)
 
+    # -- issuer-keyed client credentials (SEP-2352) ----------------------------
+
+    def save_client(self, issuer: str, client: dict) -> None:
+        """Persist dynamically-registered client credentials KEYED BY ISSUER.
+
+        SEP-2352 (Authorization Server Binding): credentials obtained via DCR
+        MUST be associated with the specific authorization server that issued
+        them, keyed by its `issuer` identifier — a client_id minted by AS-A
+        MUST never be presented to AS-B, even if both protect the same MCP
+        server. Tokens stay keyed by server URL (they authorize a resource);
+        client registrations are keyed here (they authenticate to an AS).
+        """
+        self.save(self._client_key(issuer), client)
+
+    def load_client(self, issuer: str) -> dict | None:
+        return self.load(self._client_key(issuer))
+
+    def clear_client(self, issuer: str) -> None:
+        self.clear(self._client_key(issuer))
+
+    @staticmethod
+    def _client_key(issuer: str) -> str:
+        return f"oauth-client::{issuer}"
+
     # -- internals -------------------------------------------------------------
 
     @staticmethod

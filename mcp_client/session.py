@@ -68,7 +68,11 @@ async def connect(
         )
 
     if target.startswith(("http://", "https://")):
-        auth = None if anonymous else MCPOAuth(target, TokenStore())
+        auth = (
+            None
+            if anonymous
+            else MCPOAuth(target, TokenStore(), client_metadata_url=settings.client_metadata_url)
+        )
         async with (
             streamablehttp_client(target, auth=auth) as (read, write, _get_session_id),
             build_session(read, write) as session,

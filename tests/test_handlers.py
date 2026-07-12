@@ -11,8 +11,11 @@ from mcp import types
 from mcp_client.handlers import (
     DEFAULT_MODEL,
     SamplingHandler,
+    WireSamplingError,
     choose_model,
+    elicit_from_wire,
     elicitation_handler,
+    sample_from_wire,
 )
 
 
@@ -218,3 +221,64 @@ class TestElicitationHandler:
         )
         result = await elicitation_handler(None, params)
         assert result.action == "cancel"
+
+
+class TestMrtrWireAdapters:
+    """MCP 2026-07-28 (SEP-2322): inputRequests arrive as bare dicts; the
+    adapters bridge them to the SAME terminal handlers used on the legacy
+    path and return bare result dicts for params.inputResponses."""
+
+    async def test_form_mode_defaults_when_mode_absent(self, monkeypatch):
+        """Clients MUST treat a mode-less elicitation as form mode."""
+        answers = iter(["12 months"])
+        monkeypatch.setattr("rich.prompt.Prompt.ask", staticmethod(lambda *a, **k: next(answers)))
+        monkeypatch.setattr("rich.prompt.Confirm.ask", staticmethod(lambda *a, **k: True))
+        wire_params = {
+            "message": "Which term?",
+            "requestedSchema": {
+                "type": "object",
+                "properties": {"term": {"title": "Term", "enum": ["6 months", "12 months"]}},
+            },
+        }
+        result = await elicit_from_wire(wire_params)
+        assert result == {"action": "accept", "content": {"term": "12 months"}}
+
+    async def test_url_mode_without_elicitation_id(self, monkeypatch):
+        """2026-07-28 REMOVED elicitationId (correlation moved into the
+        server's requestState); the adapter must cope with its absence."""
+        monkeypatch.setattr("rich.prompt.Confirm.ask", staticmethod(lambda *a, **k: True))
+        result = await elicit_from_wire(
+            {"mode": "url", "message": "Verify your card", "url": "https://pay.example/x"}
+        )
+        assert result == {"action": "accept"}
+
+    async def test_sampling_round_trip_produces_bare_result_dict(self):
+        handler = SamplingHandler(api_key=None, auto_approve=True)
+        handler.client = _FakeAnthropic(
+            _FakeResponse([_FakeBlock(type="text", text="Paris.")])
+        )
+        wire_params = {
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": "Capital of France?"}}
+            ],
+            "maxTokens": 50,
+        }
+        result = await sample_from_wire(handler, wire_params)
+        assert result["role"] == "assistant"
+        assert result["model"] == "claude-opus-4-8"
+        assert result["stopReason"] == "endTurn"
+        assert result["content"]["text"] == "Paris."
+        # A bare InputResponse: no jsonrpc/id/resultType envelope fields.
+        assert "resultType" not in result
+        assert "id" not in result
+
+    async def test_sampling_failure_raises_instead_of_retrying(self):
+        """Without an API key the handler yields ErrorData; under MRTR the
+        server is not waiting, so the adapter raises to end the loop."""
+        handler = SamplingHandler(api_key=None, auto_approve=True)  # client stays None
+        with pytest.raises(WireSamplingError, match="ANTHROPIC_API_KEY"):
+            await sample_from_wire(
+                handler,
+                {"messages": [{"role": "user", "content": {"type": "text", "text": "hi"}}],
+                 "maxTokens": 10},
+            )
