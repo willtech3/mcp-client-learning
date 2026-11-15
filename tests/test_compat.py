@@ -16,16 +16,25 @@ from mcp_client.config import ClientSettings
 from mcp_client.modern import compat
 from mcp_client.modern.session import ModernSession
 from mcp_client.modern.transport import ModernTransport
+from mcp_client.modern.types import DiscoverResult
 
 SETTINGS = ClientSettings(_env_file=None)
 
+# Published 2026-07-28 shape (server/discover page): identity rides in
+# result _meta, NOT as a top-level field.
 DISCOVER_RESULT = {
     "resultType": "complete",
     "supportedVersions": ["2026-07-28", "2025-11-25"],
     "capabilities": {"tools": {}, "extensions": {"io.modelcontextprotocol/skills": {}}},
-    "serverInfo": {"name": "virtual-library", "version": "2.0.0"},
+    "_meta": {"io.modelcontextprotocol/serverInfo": {"name": "virtual-library", "version": "2.0.0"}},
     "ttlMs": 3600000,
     "cacheScope": "public",
+}
+
+# Intermediate-draft shape still emitted by some servers (top-level serverInfo).
+DRAFT_DISCOVER_RESULT = {
+    **{k: v for k, v in DISCOVER_RESULT.items() if k != "_meta"},
+    "serverInfo": {"name": "draft-server", "version": "0.9.0"},
 }
 
 
@@ -57,6 +66,24 @@ class TestProbeMatrix:
             return httpx.Response(
                 200, json={"jsonrpc": "2.0", "id": body["id"], "result": DISCOVER_RESULT}
             )
+
+        era = await compat.probe_era(make_transport(handler), SETTINGS)
+        assert era == ("modern", "2026-07-28")
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            DRAFT_DISCOVER_RESULT,
+            # serverInfo is a SHOULD — a server that omits identity entirely
+            # is still modern and must not be pushed onto the legacy path.
+            {k: v for k, v in DISCOVER_RESULT.items() if k != "_meta"},
+        ],
+        ids=["draft-top-level-serverInfo", "no-serverInfo"],
+    )
+    async def test_discover_result_variants_mean_modern(self, result):
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"jsonrpc": "2.0", "id": body["id"], "result": result})
 
         era = await compat.probe_era(make_transport(handler), SETTINGS)
         assert era == ("modern", "2026-07-28")
@@ -200,3 +227,25 @@ class TestConnect:
         async with compat.connect("uv run server", SETTINGS, anonymous=True) as s:
             assert s == "legacy-session"
         assert legacy_calls == ["uv run server"]
+
+
+class TestDiscoverResultIdentity:
+    def test_server_info_from_result_meta(self):
+        info = DiscoverResult.model_validate(DISCOVER_RESULT).server_info
+        assert info is not None
+        assert (info.name, info.version) == ("virtual-library", "2.0.0")
+
+    def test_server_info_falls_back_to_draft_field(self):
+        info = DiscoverResult.model_validate(DRAFT_DISCOVER_RESULT).server_info
+        assert info is not None
+        assert info.name == "draft-server"
+
+    def test_meta_wins_over_draft_field(self):
+        both = {**DRAFT_DISCOVER_RESULT, "_meta": DISCOVER_RESULT["_meta"]}
+        info = DiscoverResult.model_validate(both).server_info
+        assert info is not None
+        assert info.name == "virtual-library"
+
+    def test_malformed_meta_identity_is_ignored(self):
+        bad = {**DISCOVER_RESULT, "_meta": {"io.modelcontextprotocol/serverInfo": {"name": 1}}}
+        assert DiscoverResult.model_validate(bad).server_info is None

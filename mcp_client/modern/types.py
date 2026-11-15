@@ -29,8 +29,8 @@ from pydantic import BaseModel, ConfigDict, Field
 # Protocol versions (basic/versioning)
 # ---------------------------------------------------------------------------
 
-#: The revision this package implements. On the wire the version string is
-#: always "2026-07-28" — the spec's /draft URL never appears in messages.
+#: The revision this package implements — the current published revision
+#: (https://modelcontextprotocol.io/specification/2026-07-28).
 PROTOCOL_VERSION = "2026-07-28"
 
 #: Versions this package can speak on the modern (per-request-metadata) path.
@@ -47,6 +47,7 @@ LEGACY_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion"
 META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 META_CLIENT_CAPS = "io.modelcontextprotocol/clientCapabilities"
+META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"  # result _meta (SHOULD)
 META_LOG_LEVEL = "io.modelcontextprotocol/logLevel"  # deprecated, SEP-2577
 META_SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 META_PROGRESS_TOKEN = "progressToken"  # unprefixed reserved key!  # noqa: S105 - a _meta key name, not a secret
@@ -54,7 +55,7 @@ META_PROGRESS_TOKEN = "progressToken"  # unprefixed reserved key!  # noqa: S105 
 # ---------------------------------------------------------------------------
 # Error codes. JSON-RPC standard codes plus the MCP-reserved sub-range
 # -32020..-32099 (allocated sequentially; renumbered from -3200x late in the
-# 2026-07-28 draft — beware stale intermediate material).
+# 2026-07-28 drafting — beware stale intermediate material).
 # ---------------------------------------------------------------------------
 
 PARSE_ERROR = -32700
@@ -159,15 +160,34 @@ class DiscoverResult(_WireModel):
     Servers MUST implement server/discover (basic/versioning, SEP-2575); a
     successful DiscoverResult is also the strongest era signal a dual-era
     client can get, so compat.py probes with it.
+
+    Server identity lives in ``_meta["io.modelcontextprotocol/serverInfo"]``
+    in the published 2026-07-28 schema (a SHOULD, like on every result).
+    Intermediate drafts put a top-level ``serverInfo`` here instead, and some
+    servers built against those drafts still emit it — so identity is
+    optional and :attr:`server_info` reads ``_meta`` first, then the draft
+    field. Requiring either would misclassify a compliant server as legacy.
     """
 
     result_type: str = Field(alias="resultType", default="complete")
     supported_versions: list[str] = Field(alias="supportedVersions")
     capabilities: dict[str, Any] = Field(default_factory=dict)
-    server_info: ServerInfo = Field(alias="serverInfo")
     instructions: str | None = None
     ttl_ms: int | None = Field(alias="ttlMs", default=None)
     cache_scope: Literal["public", "private"] | None = Field(alias="cacheScope", default=None)
+    meta: dict[str, Any] | None = Field(alias="_meta", default=None)
+    draft_server_info: ServerInfo | None = Field(alias="serverInfo", default=None)
+
+    @property
+    def server_info(self) -> ServerInfo | None:
+        """Server identity: ``_meta`` (published schema), else draft field."""
+        raw = (self.meta or {}).get(META_SERVER_INFO)
+        if isinstance(raw, dict):
+            try:
+                return ServerInfo.model_validate(raw)
+            except ValueError:
+                pass  # malformed self-reported identity is display-only; ignore
+        return self.draft_server_info
 
 
 class ListToolsResult(_WireModel):

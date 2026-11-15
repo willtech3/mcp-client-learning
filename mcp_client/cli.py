@@ -176,13 +176,16 @@ def discover(server: str = ServerOption, anonymous: bool = AnonymousOption):
                 return
             result = await session.discover()
             info = result.server_info
-            console.print(
-                Panel(
-                    f"[bold]{info.name}[/bold] v{info.version}"
-                    + (f"\n{info.title}" if info.title else ""),
-                    title="serverInfo",
+            if info is None:
+                console.print("[dim]Server did not identify itself (serverInfo is a SHOULD)[/dim]")
+            else:
+                console.print(
+                    Panel(
+                        f"[bold]{info.name}[/bold] v{info.version}"
+                        + (f"\n{info.title}" if info.title else ""),
+                        title="serverInfo",
+                    )
                 )
-            )
             console.print(f"Supported versions: [bold]{', '.join(result.supported_versions)}[/bold]")
             console.print(
                 f"Cache hints: ttlMs={result.ttl_ms} cacheScope={result.cache_scope} "
