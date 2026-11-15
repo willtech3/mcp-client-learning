@@ -1,6 +1,6 @@
 """Red-team tests for the 2026-07-28 authorization hardening.
 
-Each test encodes one of the draft-spec client MUSTs added on top of the
+Each test encodes one of the 2026-07-28 client MUSTs added on top of the
 original OAuth layer (whose invariants live untouched in test_oauth.py):
 
 - RFC 9207 / SEP-2468 `iss` validation (mix-up attack defense)
