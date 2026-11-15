@@ -7,8 +7,10 @@ requires-python = ">=3.12"
 keywords = ["mcp", "model-context-protocol", "oauth", "client", "education"]
 
 dependencies = [
-    # Official MCP Python SDK (protocol revision 2025-11-25 era)
-    "mcp>=1.27",
+    # Official MCP Python SDK — powers the LEGACY (2025-11-25 and earlier) path.
+    # The 2026-07-28 path is hand-implemented in mcp_client/modern/. mcp 2.x
+    # changed the client API, so stay on 1.x until that migration is done.
+    "mcp>=1.27,<2",
 
     # Anthropic SDK - powers the sampling handler (server-requested completions)
     "anthropic>=0.109",

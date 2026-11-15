@@ -2,17 +2,17 @@
 
 A full, modern, **secure** MCP client built from first principles — the
 client-side companion to [mcp-learning](https://github.com/willtech3/mcp-learning)'s
-Virtual Library server. **Dual-era:** it speaks the new stateless
-**[2026-07-28](https://modelcontextprotocol.io/specification/draft)** protocol
+Virtual Library server. **Dual-era:** it speaks the current stateless
+**[2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28)** protocol
 (implemented from scratch in [`mcp_client/modern/`](mcp_client/modern/)) and
 falls back to **2025-11-25** and earlier via the official Python SDK. The era
 is auto-detected with a `server/discover` probe.
 
-> **Spec:** <https://modelcontextprotocol.io/specification/draft> ·
-> [changelog](https://modelcontextprotocol.io/specification/draft/changelog) ·
-> [MRTR](https://modelcontextprotocol.io/specification/draft/basic/patterns/mrtr) ·
-> [transports](https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http) ·
-> [authorization](https://modelcontextprotocol.io/specification/draft/basic/authorization) ·
+> **Spec:** <https://modelcontextprotocol.io/specification/2026-07-28> ·
+> [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog) ·
+> [MRTR](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr) ·
+> [transports](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http) ·
+> [authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization) ·
 > [skills (SEP-2640)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640)
 
 Where most examples hide the interesting parts inside a library, this repo

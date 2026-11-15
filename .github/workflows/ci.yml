@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - uses: extractions/setup-just@v4
+      - name: Install
+        run: uv sync --dev --locked
+      - name: Lint, typecheck, test
+        # Tests never touch the OS keychain or the network (MockTransport).
+        run: just check
